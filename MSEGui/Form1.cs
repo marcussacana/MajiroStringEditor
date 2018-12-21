@@ -39,7 +39,7 @@ namespace MSEGui {
 
             string[] Strings = listBox1.Items.Cast<string>().ToArray();
 
-            File.WriteAllBytes(fd.FileName, Script.Export(Strings, false));
+            File.WriteAllBytes(fd.FileName, Script.Export(Strings, true));
         }
 
         private void textBox1_KeyDown(object sender, KeyEventArgs e) {

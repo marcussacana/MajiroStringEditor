@@ -4,7 +4,7 @@ A tool to transalte the MJO files from Majiro Engine,
 Tested with "If You Love Me, Then Say So!"
 
 ### Tags
-This tags is someting automatically converted to the Majiro script 
+This tags is someting automatically converted to the Majiro script  
 and don't represent an real tag of this engine.
 - **\n:** Breakline
 - **[wait]** Wait the user click to show the reaming text
