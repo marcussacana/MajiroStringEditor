@@ -50,6 +50,9 @@ namespace MajiroStringEditor
                 switch (Command) {
                     default:
                         if (!DialFinished) {
+                            if (Strings[Ind].EndsWith("[wait]"))
+                                Strings[Ind] = Strings[Ind].Substring(0, Strings[Ind].Length - 6);
+
                             DialFinished = true;
                             EndMap[Ind++] = i;
                         }
@@ -76,9 +79,9 @@ namespace MajiroStringEditor
                         if (!Str.EndsWith("」"))
                             Str = Str.TrimStart('「');
 
-                        if (Ind >= Strings.Count) 
+                        if (Ind >= Strings.Count)
                             Strings.Add(string.Empty);
-                        
+
                         Strings[Ind] += Str;
                         i += ReadU16At(i) + 2u;
                         break;
@@ -131,7 +134,8 @@ namespace MajiroStringEditor
             return this.Strings;
         }
 
-        public byte[] Export(string[] Strings, bool Encrypt = true) {
+        public byte[] Export(string[] Strings) => Export(Strings, true);
+        public byte[] Export(string[] Strings, bool Encrypt) {
             byte[] Script = new byte[this.Script.Length];
             this.Script.CopyTo(Script, 0);
 
@@ -149,9 +153,7 @@ namespace MajiroStringEditor
 
                 BuildJmp(BegMap[i], (uint)(Script.Length + Injections.Count)).CopyTo(Script, BegMap[i]);
                 if (IsName.ContainsKey(i) && IsName[i]) {
-                    Injections.AddRange(BuildStr(Str));
-                    Injections.AddRange(GetU16(StringId));
-                    Injections.AddRange(GetU16(GenValidId(IDs)));
+                    Injections.AddRange(BuildStr(Str, false, GenValidId(IDs)));
                     Injections.AddRange(BuildJmp((uint)(Script.Length + Injections.Count), EndMap[i]));
                     continue;
                 }
@@ -188,11 +190,8 @@ namespace MajiroStringEditor
             string Buffer = string.Empty;
             while (Line != string.Empty) {
                 if (Line.ToLower().StartsWith("\\n")) {
-                    Code.AddRange(BuildStr(Buffer));
+                    Code.AddRange(BuildStr(Buffer, true, GenValidId(IDs)));
                     Buffer = string.Empty;
-                    Code.AddRange(GetU16(ParseStr));
-                    Code.AddRange(GetU16(StringId));
-                    Code.AddRange(GetU16(GenValidId(IDs)));
 
                     Code.AddRange(GetU16(AdvEvent));
                     Code.AddRange(GetU16(AdvEvtType));
@@ -202,11 +201,8 @@ namespace MajiroStringEditor
                     continue;
                 }
                 if (Line.ToLower().StartsWith("[wait]")) {
-                    Code.AddRange(BuildStr(Buffer));
+                    Code.AddRange(BuildStr(Buffer, true, GenValidId(IDs)));
                     Buffer = string.Empty;
-                    Code.AddRange(GetU16(ParseStr));
-                    Code.AddRange(GetU16(StringId));
-                    Code.AddRange(GetU16(GenValidId(IDs)));
 
                     Code.AddRange(GetU16(AdvEvent));
                     Code.AddRange(GetU16(AdvEvtType));
@@ -215,18 +211,32 @@ namespace MajiroStringEditor
                     Line = Line.Substring(6);
                     continue;
                 }
+                if (Line.ToLower().StartsWith("[clear]")) {
+                    Code.AddRange(BuildStr(Buffer, true, GenValidId(IDs)));
+                    Buffer = string.Empty;
+
+                    Code.AddRange(GetU16(AdvEvent));
+                    Code.AddRange(GetU16(AdvEvtType));
+                    Code.AddRange(GetU16(AdvDialCls));
+
+                    Line = Line.Substring(7);
+                    continue;
+                }
+                if (Line.ToLower().StartsWith("[line]")) {
+                    Code.AddRange(BuildStr(Buffer, false, GenValidId(IDs)));
+                    Buffer = string.Empty;
+
+                    Line = "「「" + Line.Substring(6);
+                }
 
                 char c = Line.First();
                 Line = Line.Substring(1);
                 Buffer += c;
             }
 
-            if (Buffer != string.Empty) {
-                Code.AddRange(BuildStr(Buffer));
-                Code.AddRange(GetU16(ParseStr));
-                Code.AddRange(GetU16(StringId));
-                Code.AddRange(GetU16(GenValidId(IDs)));
-            }
+            if (Buffer != string.Empty)
+                Code.AddRange(BuildStr(Buffer, true, GenValidId(IDs)));
+            
 
             return Code.ToArray();
         }
@@ -240,12 +250,16 @@ namespace MajiroStringEditor
             return Current;
         }
 
-        private byte[] BuildStr(string Str) {
+        private byte[] BuildStr(string Str, bool Process, ushort ID) {
             List<byte> Buffer = new List<byte>();
             Buffer.AddRange(GetU16(ShowText));
             Buffer.AddRange(GetU16((ushort)(Encoding.GetByteCount(Str) + 1u)));
             Buffer.AddRange(Encoding.GetBytes(Str));
             Buffer.Add(0x00);
+            if (Process)
+                Buffer.AddRange(GetU16(ParseStr));
+            Buffer.AddRange(GetU16(StringId));
+            Buffer.AddRange(GetU16(ID));
 
             return Buffer.ToArray();
         }
