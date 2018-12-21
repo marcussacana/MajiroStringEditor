@@ -51,7 +51,7 @@ namespace MajiroStringEditor
                     default:
                         if (!DialFinished) {
                             DialFinished = true;
-                            EndMap[Ind] = i;
+                            EndMap[Ind++] = i;
                         }
 
                         i++;
