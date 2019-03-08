@@ -19,17 +19,18 @@ namespace MajiroStringEditor
         uint FirstID = 0;
         string[] Strings;
 
+        bool Edited = false;
 
         Dictionary<int, bool> IsName;
         Dictionary<int, uint> BegMap;
         Dictionary<int, uint> EndMap;
         List<ushort> LinesIds;
+        List<uint> DetectedJmps;
 
         const uint ByteCodeBegin = 0x28;
         public Obj1(byte[] Script) {
             this.Script = Script;
             string Header = ReadStrAt(0);
-            ScriptLen = ReadU32At(0x24);
             if (Header == EncHeader)
                 Decrypt();
             
@@ -40,6 +41,7 @@ namespace MajiroStringEditor
             EndMap = new Dictionary<int, uint>();
             IsName = new Dictionary<int, bool>();
             LinesIds = new List<ushort>();
+            DetectedJmps = new List<uint>();
 
             var JmpPos = new List<long>();
 
@@ -50,9 +52,11 @@ namespace MajiroStringEditor
             //At 0x18 have a prefixed length array of the script entry point table (functions) and contains 2 dword, HASH + Offset
             HeaderLen = 0x18 + ((ReadU32At(0x18) * (4 * 2)) + 4) + 4;//+4 Lenght DW, +4 = Script Length
 
+            ScriptLen = ReadU32At(HeaderLen - 4);
             for (uint i = 0; i < Script.Length; i++) {
                 if (EqualsAt(i, Signature)) {
                     ScriptLen = i;
+                    Edited = true;
                 }
             }
 
@@ -146,12 +150,21 @@ namespace MajiroStringEditor
                         i += 2;
                         break;
                     case UnconJmp:
+                        if (!Edited || DetectedJmps.Contains(i)) {
+                            i += 6;
+                            break;
+                        }
+
                         i += 2;
                         unchecked {
                             long Jmp = (int)ReadU32At(i) + (int)i + 4;
                             i += 4;
-                            if (EqualsAt(i + 4, new byte[] { 0x00, 0x00 }) || (Jmp < ScriptLen && i > ScriptLen) || i == ScriptLen)
+
+                            //Verify if is a injected Jmp
+                            if ((i < ScriptLen && Jmp > ScriptLen) || (Jmp < ScriptLen && i > ScriptLen) || i == Script.Length) {
+                                DetectedJmps.Add(i - 6);
                                 i = (uint)Jmp;
+                            }
                         }
                         break;
                 }
