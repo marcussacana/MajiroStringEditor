@@ -8,9 +8,10 @@ namespace MajiroStringEditor
 {
     public class Obj1
     {
-        public byte[] Signature = Encoding.ASCII.GetBytes("Edited With MajiroStringEditor");
         public Encoding Encoding = Encoding.GetEncoding(932);
         static KEY XOR = new KEY();
+
+        byte[] Signature = Encoding.ASCII.GetBytes("Edited With MajiroStringEditor");
         byte[] Script;
 
         uint HeaderLen = 0;
@@ -49,7 +50,7 @@ namespace MajiroStringEditor
             //At 0x18 have a prefixed length array of the script entry point table (functions) and contains 2 dword, HASH + Offset
             HeaderLen = 0x18 + ((ReadU32At(0x18) * (4 * 2)) + 4) + 4;//+4 Lenght DW, +4 = Script Length
 
-            ScriptLen = ReadU32At(HeaderLen - 4);
+            ScriptLen = ReadU32At(HeaderLen - 4) + HeaderLen;
             for (uint i = 0; i < Script.Length; i++) {
                 if (EqualsAt(i, Signature)) {
                     ScriptLen = i;
@@ -86,8 +87,8 @@ namespace MajiroStringEditor
 
                         string Str = ReadStrAt(i + 2);
 
-                        if (Str.Contains("Somebody's hands reached out from"))
-                            System.Diagnostics.Debugger.Break();
+                        //if (Str.Contains("With that, Maya"))
+                        //    System.Diagnostics.Debugger.Break();
 
                         if (Str.StartsWith("「")) {
                             IsName[Ind] = true;
@@ -179,8 +180,10 @@ namespace MajiroStringEditor
                 }
             }
 
-            this.Strings = Strings.ToArray();
-            return this.Strings;
+            this.Strings = new string[Strings.Count];
+            Strings.CopyTo(this.Strings, 0);
+
+            return Strings.ToArray();//Prevent edit the private array.
         }
 
         private bool EqualsAt(uint Index, byte[] Content) {
