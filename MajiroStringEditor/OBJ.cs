@@ -8,14 +8,16 @@ namespace MajiroStringEditor
 {
     public class Obj1
     {
+        public byte[] Signature = Encoding.ASCII.GetBytes("Edited With MajiroStringEditor");
         public Encoding Encoding = Encoding.GetEncoding(932);
         static KEY XOR = new KEY();
         byte[] Script;
 
+        uint HeaderLen = 0;
+
         uint ScriptLen;
         uint FirstID = 0;
         string[] Strings;
-
 
 
         Dictionary<int, bool> IsName;
@@ -39,10 +41,24 @@ namespace MajiroStringEditor
             IsName = new Dictionary<int, bool>();
             LinesIds = new List<ushort>();
 
+            var JmpPos = new List<long>();
+
             List<string> Strings = new List<string>();
             bool DialFinished = true;
             int Ind = 0;
-            for (uint x = 0, i = ByteCodeBegin; x < ScriptLen; x++) {
+
+            //At 0x18 have a prefixed length array of the script entry point table (functions) and contains 2 dword, HASH + Offset
+            HeaderLen = 0x18 + ((ReadU32At(0x18) * (4 * 2)) + 4) + 4;//+4 Lenght DW, +4 = Script Length
+
+            for (uint i = 0; i < Script.Length; i++) {
+                if (EqualsAt(i, Signature)) {
+                    ScriptLen = i;
+                }
+            }
+
+            bool Continue = true;
+
+            for (uint i = ByteCodeBegin; Continue; ) {
                 if (i + 2 >= Script.Length)
                     break;
 
@@ -67,14 +83,16 @@ namespace MajiroStringEditor
                         if (!BegMap.ContainsKey(Ind))
                             BegMap[Ind] = i - 2;
 
-                        DialFinished = false;
                         string Str = ReadStrAt(i + 2);
+
                         if (Str.StartsWith("「")) {
                             IsName[Ind] = true;
                             EndMap[Ind++] = i - 2;
 
                             BegMap[Ind] = i - 2;
                         }
+
+                        DialFinished = false;
 
                         if (!Str.EndsWith("」"))
                             Str = Str.TrimStart('「');
@@ -127,6 +145,15 @@ namespace MajiroStringEditor
                     case ParseStr:
                         i += 2;
                         break;
+                    case UnconJmp:
+                        i += 2;
+                        unchecked {
+                            long Jmp = (int)ReadU32At(i) + (int)i + 4;
+                            i += 4;
+                            if (EqualsAt(i + 4, new byte[] { 0x00, 0x00 }) || (Jmp < ScriptLen && i > ScriptLen) || i == ScriptLen)
+                                i = (uint)Jmp;
+                        }
+                        break;
                 }
             }
 
@@ -134,12 +161,27 @@ namespace MajiroStringEditor
             return this.Strings;
         }
 
-        public byte[] Export(string[] Strings) => Export(Strings, true);
+        private bool EqualsAt(uint Index, byte[] Content) {
+            if (Content.Length + Index >= Script.Length)
+                return false;
+
+            for (uint i = 0; i < Content.Length; i++) {
+                if (Content[i] != Script[Index + i])
+                    return false;
+            }
+
+            return true;
+        }
+
+        public byte[] Export(string[] Strings) => Export(Strings, false);
         public byte[] Export(string[] Strings, bool Encrypt) {
             byte[] Script = new byte[this.Script.Length];
             this.Script.CopyTo(Script, 0);
 
             List<byte> Injections = new List<byte>();
+            Injections.AddRange(new byte[6]);
+            Injections.AddRange(Signature);
+
             List<ushort> IDs = new List<ushort>(LinesIds);
             for (int i = 0; i < Strings.Length; i++) {
                 bool FromName = IsName.ContainsKey(i - 1) && IsName[i - 1];
@@ -174,8 +216,11 @@ namespace MajiroStringEditor
                 Injections.AddRange(BuildJmp((uint)(Script.Length + Injections.Count), EndMap[i]));
             }
 
-            long NewLen = Script.Length + Injections.Count - 0x28;
-            GetU32((uint)NewLen).CopyTo(Script, 0x24);
+            Injections.RemoveRange(0, 6);
+            Injections.InsertRange(0, BuildJmp((uint)Injections.Count));
+
+            long NewLen = Script.Length + Injections.Count - HeaderLen;
+            GetU32((uint)NewLen).CopyTo(Script, HeaderLen - 4);
 
             Script = Script.Concat(Injections).ToArray();
 
@@ -278,6 +323,11 @@ namespace MajiroStringEditor
 
             return Buffer.ToArray();
         }
+
+        private byte[] BuildJmp(uint Bytes) {
+            return BuildJmp(0, Bytes + 6);
+        }
+
         private bool IsValidStr(uint Index) {
             ushort Len = ReadU16At(Index);
             if (Len + Index + 2 >= Script.Length)
