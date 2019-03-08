@@ -25,7 +25,6 @@ namespace MajiroStringEditor
         Dictionary<int, uint> BegMap;
         Dictionary<int, uint> EndMap;
         List<ushort> LinesIds;
-        List<uint> DetectedJmps;
 
         const uint ByteCodeBegin = 0x28;
         public Obj1(byte[] Script) {
@@ -41,9 +40,7 @@ namespace MajiroStringEditor
             EndMap = new Dictionary<int, uint>();
             IsName = new Dictionary<int, bool>();
             LinesIds = new List<ushort>();
-            DetectedJmps = new List<uint>();
-
-            var JmpPos = new List<long>();
+            
 
             List<string> Strings = new List<string>();
             bool DialFinished = true;
@@ -60,10 +57,10 @@ namespace MajiroStringEditor
                 }
             }
 
-            bool Continue = true;
+            bool InProxy = false;
 
-            for (uint i = ByteCodeBegin; Continue; ) {
-                if (i + 2 >= Script.Length)
+            for (uint i = ByteCodeBegin;; ) {
+                if (i + 2 >= (InProxy ? (uint)Script.Length : ScriptLen))
                     break;
 
                 ushort Command = ReadU16At(i);
@@ -89,6 +86,9 @@ namespace MajiroStringEditor
 
                         string Str = ReadStrAt(i + 2);
 
+                        if (Str.Contains("Somebody's hands reached out from"))
+                            System.Diagnostics.Debugger.Break();
+
                         if (Str.StartsWith("「")) {
                             IsName[Ind] = true;
                             EndMap[Ind++] = i - 2;
@@ -112,6 +112,12 @@ namespace MajiroStringEditor
                         Command = ReadU16At(i);
                         if (Command != AdvEvtType)
                             break;
+
+                        if (Ind >= Strings.Count) {
+                            Strings.Add(string.Empty);
+                            DialFinished = false;
+                        }
+
                         i += 2;
                         Command = ReadU16At(i);
                         i += 2;
@@ -150,7 +156,7 @@ namespace MajiroStringEditor
                         i += 2;
                         break;
                     case UnconJmp:
-                        if (!Edited || DetectedJmps.Contains(i)) {
+                        if (!Edited) {
                             i += 6;
                             break;
                         }
@@ -161,8 +167,11 @@ namespace MajiroStringEditor
                             i += 4;
 
                             //Verify if is a injected Jmp
-                            if ((i < ScriptLen && Jmp > ScriptLen) || (Jmp < ScriptLen && i > ScriptLen) || i == Script.Length) {
-                                DetectedJmps.Add(i - 6);
+                            if (i < ScriptLen && Jmp > ScriptLen) {
+                                InProxy = true;
+                                i = (uint)Jmp;
+                            } else if (Jmp < ScriptLen && i > ScriptLen || i == Script.Length) {
+                                InProxy = false;
                                 i = (uint)Jmp;
                             }
                         }
